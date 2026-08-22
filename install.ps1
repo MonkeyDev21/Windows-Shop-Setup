@@ -9,10 +9,8 @@
 #   Zalo
 #   WinRAR
 #   UniKey
-#   Adobe Acrobat Reader
+#   Foxit PDF Reader
 #   WPS Office
-#
-# Designed for repeated deployment on shop PCs.
 # ============================================================
 
 Set-StrictMode -Version Latest
@@ -23,7 +21,7 @@ $ProgressPreference = "SilentlyContinue"
 # CONFIG
 # ============================================================
 
-$ScriptVersion = "2.0.0"
+$ScriptVersion = "2.1.0"
 $MaxRetries    = 3
 
 $Apps = @(
@@ -44,8 +42,8 @@ $Apps = @(
         Id   = "UniKey.UniKey"
     },
     @{
-        Name = "Adobe Acrobat Reader"
-        Id   = "Adobe.Acrobat.Reader.64-bit"
+        Name = "Foxit PDF Reader"
+        Id   = "Foxit.FoxitReader"
     },
     @{
         Name = "WPS Office"
@@ -998,11 +996,11 @@ try {
 
 
     Create-Shortcut `
-        -Name "Adobe Acrobat Reader" `
+        -Name "Foxit PDF Reader" `
         -Keywords @(
-            "Adobe Acrobat"
-            "Acrobat Reader"
-            "Adobe Reader"
+            "Foxit PDF Reader"
+            "Foxit Reader"
+            "Foxit"
         )
 
 
@@ -1046,7 +1044,7 @@ try {
         elseif ($Result.Status -eq "SKIP") {
 
             Write-Host `
-                "[SKIP] $($Result.Name)" `
+                "[SKIP] $($Result.Name) - da co san" `
                 -ForegroundColor Yellow
         }
         else {
