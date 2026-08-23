@@ -11,6 +11,8 @@
 #   UniKey
 #   Foxit PDF Reader
 #   WPS Office
+#
+# Version: 2.2.0
 # ============================================================
 
 Set-StrictMode -Version Latest
@@ -21,8 +23,8 @@ $ProgressPreference = "SilentlyContinue"
 # CONFIG
 # ============================================================
 
-$ScriptVersion = "2.1.0"
-$MaxRetries    = 3
+$ScriptVersion = "2.2.0"
+$MaxRetries = 3
 
 $Apps = @(
     @{
@@ -133,7 +135,7 @@ function Write-Log {
 
 
 # ============================================================
-# ADMIN
+# ADMINISTRATOR
 # ============================================================
 
 function Test-Administrator {
@@ -185,7 +187,7 @@ function Test-Windows {
     Write-Log `
         "Windows version: $Version"
 
-    # Windows 10 1809 / build 17763+
+    # Windows 10 1809 / Build 17763+
     if ($Version.Build -lt 17763) {
 
         Write-Log `
@@ -233,7 +235,7 @@ function Test-Internet {
 
 
 # ============================================================
-# WINGET PATH
+# FIND WINGET
 # ============================================================
 
 function Get-WingetPath {
@@ -261,7 +263,6 @@ function Get-WingetPath {
     }
 
 
-    # App Installer location
     $WindowsApps = `
         "$env:ProgramFiles\WindowsApps"
 
@@ -309,7 +310,7 @@ function Test-Winget {
 
 
 # ============================================================
-# INSTALL WINGET / APP INSTALLER
+# INSTALL WINGET
 # ============================================================
 
 function Install-Winget {
@@ -338,7 +339,7 @@ function Install-Winget {
 
 
     # --------------------------------------------------------
-    # Latest official WinGet release
+    # Microsoft WinGet GitHub Release API
     # --------------------------------------------------------
 
     $Api = `
@@ -451,7 +452,7 @@ function Install-Winget {
 
 
     # --------------------------------------------------------
-    # Wait
+    # Wait for WinGet
     # --------------------------------------------------------
 
     Write-Log `
@@ -477,7 +478,7 @@ function Install-Winget {
     # --------------------------------------------------------
 
     Write-Log `
-        "WinGet chua san sang. Thu dang ky lai App Installer..." `
+        "Thu dang ky lai App Installer..." `
         "WARN"
 
     try {
@@ -527,6 +528,10 @@ function Install-Winget {
 
 # ============================================================
 # RUN WINGET
+#
+# QUAN TRONG:
+# Ham nay CHI tra ve ExitCode.
+# Khong tra output cua WinGet vao bien $Code.
 # ============================================================
 
 function Invoke-Winget {
@@ -543,49 +548,61 @@ function Invoke-Winget {
         throw "Khong tim thay winget.exe."
     }
 
-    & $Winget @Arguments
 
-    return $LASTEXITCODE
+    & $Winget @Arguments 2>&1 |
+        ForEach-Object {
+
+            Write-Host $_
+        }
+
+
+    # Chi lay ExitCode cua tien trinh WinGet
+    return [int]$LASTEXITCODE
 }
 
 
 # ============================================================
-# CHECK APP
+# CHECK APP INSTALLED
 # ============================================================
 
 function Test-AppInstalled {
 
     param(
+        [Parameter(Mandatory)]
         [string]$Id
     )
 
+    $Winget = Get-WingetPath
+
+    if (-not $Winget) {
+
+        return $false
+    }
+
+
     try {
 
-        $Output = `
-            Invoke-Winget @(
-                "list"
-                "--id"
-                $Id
-                "--exact"
-                "--source"
-                "winget"
-                "--disable-interactivity"
-            ) 2>&1
+        $Output = & $Winget `
+            list `
+            --id $Id `
+            --exact `
+            --source winget `
+            --disable-interactivity `
+            2>&1
 
-        if ($LASTEXITCODE -eq 0) {
 
-            $Text = $Output -join "`n"
+        $Text = `
+            $Output -join "`n"
 
-            if (
-                $Text -match [regex]::Escape($Id)
-            ) {
 
-                return $true
-            }
+        if ($Text -match [regex]::Escape($Id)) {
+
+            return $true
         }
     }
     catch {
     }
+
 
     return $false
 }
@@ -598,18 +615,27 @@ function Test-AppInstalled {
 function Install-App {
 
     param(
+        [Parameter(Mandatory)]
         [string]$Name,
+
+        [Parameter(Mandatory)]
         [string]$Id
     )
 
     Write-Host ""
-    Write-Host "------------------------------------------------------------" `
+
+    Write-Host `
+        "------------------------------------------------------------" `
         -ForegroundColor DarkGray
 
     Write-Log `
         "[$Name]"
 
+
+    # --------------------------------------------------------
     # Already installed
+    # --------------------------------------------------------
+
     if (Test-AppInstalled -Id $Id) {
 
         Write-Log `
@@ -620,11 +646,19 @@ function Install-App {
     }
 
 
+    # --------------------------------------------------------
     # Install
-    for ($Attempt = 1; $Attempt -le $MaxRetries; $Attempt++) {
+    # --------------------------------------------------------
+
+    for (
+        $Attempt = 1;
+        $Attempt -le $MaxRetries;
+        $Attempt++
+    ) {
 
         Write-Log `
             "Dang cai $Name - lan $Attempt/$MaxRetries..."
+
 
         try {
 
@@ -642,18 +676,33 @@ function Install-App {
             )
 
 
+            # ------------------------------------------------
+            # ExitCode 0 = WinGet installation successful
+            # ------------------------------------------------
+
             if ($Code -eq 0) {
 
-                Start-Sleep -Seconds 2
+                Write-Log `
+                    "$Name cai thanh cong." `
+                    "OK"
 
-                if (Test-AppInstalled -Id $Id) {
+                return "OK"
+            }
 
-                    Write-Log `
-                        "$Name cai thanh cong." `
-                        "OK"
 
-                    return "OK"
-                }
+            # ------------------------------------------------
+            # IMPORTANT:
+            # WinGet sometimes returns an error when package
+            # is already installed. Check again before retry.
+            # ------------------------------------------------
+
+            if (Test-AppInstalled -Id $Id) {
+
+                Write-Log `
+                    "$Name da duoc cai thanh cong (package da ton tai)." `
+                    "OK"
+
+                return "OK"
             }
 
 
@@ -670,6 +719,9 @@ function Install-App {
 
 
         if ($Attempt -lt $MaxRetries) {
+
+            Write-Log `
+                "Cho 3 giay roi thu lai..."
 
             Start-Sleep -Seconds 3
         }
@@ -691,12 +743,17 @@ function Install-App {
 function Create-Shortcut {
 
     param(
+        [Parameter(Mandatory)]
         [string]$Name,
+
+        [Parameter(Mandatory)]
         [string[]]$Keywords
     )
 
+
     $Desktop = `
         [Environment]::GetFolderPath("Desktop")
+
 
     $Destination = `
         Join-Path `
@@ -755,12 +812,14 @@ function Create-Shortcut {
             ) {
 
                 $Match = $Shortcut
+
                 break
             }
         }
 
 
         if ($Match) {
+
             break
         }
     }
@@ -781,14 +840,18 @@ function Create-Shortcut {
         $Shell = `
             New-Object -ComObject WScript.Shell
 
+
         $ShortcutObject = `
             $Shell.CreateShortcut($Destination)
+
 
         $ShortcutObject.TargetPath = `
             $Match.FullName
 
+
         $ShortcutObject.WorkingDirectory = `
             $Match.DirectoryName
+
 
         $ShortcutObject.Save()
 
@@ -817,17 +880,26 @@ try {
     Initialize-Log
 
 
+    # --------------------------------------------------------
+    # HEADER
+    # --------------------------------------------------------
+
     Write-Host ""
-    Write-Host "============================================================" `
+
+    Write-Host `
+        "============================================================" `
         -ForegroundColor Cyan
 
-    Write-Host "               WINDOWS SHOP SETUP" `
+    Write-Host `
+        "                 WINDOWS SHOP SETUP" `
         -ForegroundColor Cyan
 
-    Write-Host "                    v$ScriptVersion" `
+    Write-Host `
+        "                      v$ScriptVersion" `
         -ForegroundColor Cyan
 
-    Write-Host "============================================================" `
+    Write-Host `
+        "============================================================" `
         -ForegroundColor Cyan
 
     Write-Host ""
@@ -864,6 +936,7 @@ try {
     Write-Log `
         "Kiem tra Internet..."
 
+
     if (-not (Test-Internet)) {
 
         Write-Log `
@@ -872,6 +945,7 @@ try {
 
         exit 1
     }
+
 
     Write-Log `
         "Internet OK." `
@@ -884,6 +958,7 @@ try {
 
     Write-Log `
         "Kiem tra WinGet..."
+
 
     if (-not (Test-Winget)) {
 
@@ -898,8 +973,13 @@ try {
     }
 
 
+    $WingetVersionOutput = `
+        & (Get-WingetPath) --version 2>&1
+
+
     $WingetVersion = `
-        (Invoke-Winget @("--version") 2>&1) -join " "
+        $WingetVersionOutput -join " "
+
 
     Write-Log `
         "WinGet: $WingetVersion" `
@@ -907,28 +987,39 @@ try {
 
 
     # --------------------------------------------------------
-    # Source
+    # Update source
     # --------------------------------------------------------
 
     Write-Log `
         "Cap nhat WinGet source..."
 
+
     try {
 
-        Invoke-Winget @(
+        $SourceCode = Invoke-Winget @(
             "source"
             "update"
             "--disable-interactivity"
-        ) | Out-Null
+        )
 
-        Write-Log `
-            "Source update OK." `
-            "OK"
+
+        if ($SourceCode -eq 0) {
+
+            Write-Log `
+                "Source update OK." `
+                "OK"
+        }
+        else {
+
+            Write-Log `
+                "Source update ExitCode=$SourceCode. Tiep tuc." `
+                "WARN"
+        }
     }
     catch {
 
         Write-Log `
-            "Source update khong thanh cong. Tiep tuc." `
+            "Source update loi. Tiep tuc." `
             "WARN"
     }
 
@@ -943,6 +1034,7 @@ try {
             -Name $App.Name `
             -Id $App.Id
 
+
         $Results += [PSCustomObject]@{
             Name   = $App.Name
             Id     = $App.Id
@@ -956,13 +1048,17 @@ try {
     # --------------------------------------------------------
 
     Write-Host ""
-    Write-Host "============================================================" `
+
+    Write-Host `
+        "============================================================" `
         -ForegroundColor Cyan
 
-    Write-Host "                 DESKTOP SHORTCUTS" `
+    Write-Host `
+        "                 DESKTOP SHORTCUTS" `
         -ForegroundColor Cyan
 
-    Write-Host "============================================================" `
+    Write-Host `
+        "============================================================" `
         -ForegroundColor Cyan
 
 
@@ -1017,14 +1113,17 @@ try {
     # --------------------------------------------------------
 
     Write-Host ""
-    Write-Host ""
-    Write-Host "============================================================" `
+
+    Write-Host `
+        "============================================================" `
         -ForegroundColor Cyan
 
-    Write-Host "                     KET QUA" `
+    Write-Host `
+        "                       KET QUA" `
         -ForegroundColor Cyan
 
-    Write-Host "============================================================" `
+    Write-Host `
+        "============================================================" `
         -ForegroundColor Cyan
 
     Write-Host ""
@@ -1059,37 +1158,50 @@ try {
 
 
     Write-Host ""
-    Write-Host "Log:" `
+
+    Write-Host `
+        "Log:" `
         -ForegroundColor Cyan
 
-    Write-Host $LogFile `
+    Write-Host `
+        $LogFile `
         -ForegroundColor Gray
 
     Write-Host ""
 
 
+    # --------------------------------------------------------
+    # FINAL STATUS
+    # --------------------------------------------------------
+
     if ($Failed -eq 0) {
 
-        Write-Host "============================================================" `
+        Write-Host `
+            "============================================================" `
             -ForegroundColor Green
 
-        Write-Host "              TAT CA - THANH CONG" `
+        Write-Host `
+            "                 TAT CA - THANH CONG" `
             -ForegroundColor Green
 
-        Write-Host "============================================================" `
+        Write-Host `
+            "============================================================" `
             -ForegroundColor Green
 
         exit 0
     }
     else {
 
-        Write-Host "============================================================" `
+        Write-Host `
+            "============================================================" `
             -ForegroundColor Red
 
-        Write-Host "       HOAN TAT NHUNG CO $Failed APP BI LOI" `
+        Write-Host `
+            "       HOAN TAT NHUNG CO $Failed APP BI LOI" `
             -ForegroundColor Red
 
-        Write-Host "============================================================" `
+        Write-Host `
+            "============================================================" `
             -ForegroundColor Red
 
         exit 2
@@ -1106,12 +1218,17 @@ catch {
     catch {
     }
 
+
     Write-Host ""
-    Write-Host "INSTALLER GAP LOI NGHIEM TRONG." `
+
+    Write-Host `
+        "INSTALLER GAP LOI NGHIEM TRONG." `
         -ForegroundColor Red
 
     Write-Host ""
-    Write-Host "Log: $LogFile" `
+
+    Write-Host `
+        "Log: $LogFile" `
         -ForegroundColor Yellow
 
     exit 1
