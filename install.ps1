@@ -1,25 +1,25 @@
 # ============================================================
 # WINDOWS SHOP INSTALLER
-# VERSION 6.0.0
+# VERSION 6.1.0
 # ============================================================
 
 $ErrorActionPreference = "Continue"
 $ProgressPreference = "SilentlyContinue"
 
-$Version = "6.0.0"
+$Version = "6.1.0"
 
 
 # ============================================================
 # ADMIN CHECK
 # ============================================================
 
-$CurrentIdentity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
 
-$CurrentPrincipal = New-Object Security.Principal.WindowsPrincipal(
-    $CurrentIdentity
+$Principal = New-Object Security.Principal.WindowsPrincipal(
+    $Identity
 )
 
-$IsAdmin = $CurrentPrincipal.IsInRole(
+$IsAdmin = $Principal.IsInRole(
     [Security.Principal.WindowsBuiltInRole]::Administrator
 )
 
@@ -27,10 +27,10 @@ if (-not $IsAdmin) {
 
     Write-Host ""
     Write-Host "==================================================" -ForegroundColor Red
-    Write-Host " SCRIPT CAN CHAY BANG ADMINISTRATOR" -ForegroundColor Red
+    Write-Host " CAN CHAY BANG ADMINISTRATOR" -ForegroundColor Red
     Write-Host "==================================================" -ForegroundColor Red
     Write-Host ""
-    Write-Host "Mo PowerShell bang Run as Administrator roi chay lai." -ForegroundColor Yellow
+    Write-Host "Mo PowerShell bang Run as Administrator." -ForegroundColor Yellow
     Write-Host ""
 
     Read-Host "Nhan Enter de thoat"
@@ -54,6 +54,7 @@ New-Item `
     -ErrorAction SilentlyContinue |
     Out-Null
 
+
 $LogFile = Join-Path `
     $LogFolder `
     "install.log"
@@ -64,18 +65,27 @@ function Write-Log {
     param(
         [string]$Message,
 
+        [ValidateSet(
+            "INFO",
+            "OK",
+            "WARN",
+            "ERROR"
+        )]
         [string]$Level = "INFO"
     )
+
 
     $Time = Get-Date -Format "HH:mm:ss"
 
     $Line = "[$Time] [$Level] $Message"
+
 
     Add-Content `
         -Path $LogFile `
         -Value $Line `
         -Encoding UTF8 `
         -ErrorAction SilentlyContinue
+
 
     switch ($Level) {
 
@@ -108,6 +118,7 @@ function Get-WingetPath {
         winget.exe `
         -ErrorAction SilentlyContinue
 
+
     if ($Command) {
 
         return $Command.Source
@@ -115,6 +126,7 @@ function Get-WingetPath {
 
 
     $Path = "$env:LOCALAPPDATA\Microsoft\WindowsApps\winget.exe"
+
 
     if (Test-Path $Path) {
 
@@ -130,6 +142,7 @@ function Test-Winget {
 
     $Winget = Get-WingetPath
 
+
     if (-not $Winget) {
 
         return $false
@@ -140,32 +153,32 @@ function Test-Winget {
 
         $Version = & $Winget --version 2>$null
 
-        if ($LASTEXITCODE -eq 0 -and $Version) {
 
-            return $true
-        }
+        return (
+            $LASTEXITCODE -eq 0 -and
+            $Version
+        )
     }
     catch {
+
+        return $false
     }
-
-
-    return $false
 }
 
 
 # ============================================================
-# TRY REPAIR WINGET
+# REPAIR WINGET
 # ============================================================
 
 function Repair-Winget {
 
     Write-Log `
-        "WinGet chua san sang. Dang thu khoi phuc..." `
+        "WinGet chua co. Dang thu khoi phuc..." `
         "WARN"
 
 
     # --------------------------------------------------------
-    # Try registering App Installer
+    # App Installer registration
     # --------------------------------------------------------
 
     try {
@@ -175,6 +188,7 @@ function Repair-Winget {
             -MainPackage `
             "Microsoft.DesktopAppInstaller_8wekyb3d8bbwe" `
             -ErrorAction Stop
+
 
         Start-Sleep -Seconds 2
 
@@ -193,7 +207,7 @@ function Repair-Winget {
 
 
     # --------------------------------------------------------
-    # Try WinGet Client
+    # Microsoft.WinGet.Client
     # --------------------------------------------------------
 
     try {
@@ -243,13 +257,13 @@ function Repair-Winget {
             -ErrorAction Stop
 
 
-        Start-Sleep -Seconds 3
+        Start-Sleep -Seconds 2
     }
     catch {
 
         Write-Log `
             (
-                "Khong the repair WinGet: " +
+                "Khong the khoi phuc WinGet: " +
                 $_.Exception.Message
             ) `
             "ERROR"
@@ -273,14 +287,14 @@ function Repair-Winget {
 
 
 # ============================================================
-# APPLICATION LIST
+# APPLICATIONS
 # ============================================================
 
 $Apps = @(
 
     [PSCustomObject]@{
         Name = "Google Chrome"
-        Id   = "Google.Chrome"
+        Id = "Google.Chrome"
 
         Paths = @(
             "$env:ProgramFiles\Google\Chrome\Application\chrome.exe"
@@ -297,7 +311,7 @@ $Apps = @(
 
     [PSCustomObject]@{
         Name = "Zalo"
-        Id   = "VNGCorp.Zalo"
+        Id = "VNGCorp.Zalo"
 
         Paths = @(
             "$env:LOCALAPPDATA\Programs\Zalo\Zalo.exe"
@@ -314,7 +328,7 @@ $Apps = @(
 
     [PSCustomObject]@{
         Name = "WinRAR"
-        Id   = "RARLab.WinRAR"
+        Id = "RARLab.WinRAR"
 
         Paths = @(
             "$env:ProgramFiles\WinRAR\WinRAR.exe"
@@ -330,7 +344,7 @@ $Apps = @(
 
     [PSCustomObject]@{
         Name = "UniKey"
-        Id   = "UniKey.UniKey"
+        Id = "UniKey.UniKey"
 
         Paths = @(
             "$env:ProgramFiles\UniKey\UniKeyNT.exe"
@@ -348,7 +362,7 @@ $Apps = @(
 
     [PSCustomObject]@{
         Name = "Foxit PDF Reader"
-        Id   = "Foxit.FoxitReader"
+        Id = "Foxit.FoxitReader"
 
         Paths = @(
             "$env:ProgramFiles\Foxit Software\Foxit PDF Reader\FoxitPDFReader.exe"
@@ -366,7 +380,7 @@ $Apps = @(
 
     [PSCustomObject]@{
         Name = "WPS Office"
-        Id   = "Kingsoft.WPSOffice"
+        Id = "Kingsoft.WPSOffice"
 
         Paths = @(
             "$env:ProgramFiles\WPS Office\ksolaunch.exe"
@@ -385,7 +399,7 @@ $Apps = @(
 
 
 # ============================================================
-# CHECK BY FILE
+# FAST FILE CHECK
 # ============================================================
 
 function Test-AppFile {
@@ -393,6 +407,7 @@ function Test-AppFile {
     param(
         $App
     )
+
 
     foreach ($Path in $App.Paths) {
 
@@ -411,7 +426,7 @@ function Test-AppFile {
 
 
 # ============================================================
-# CHECK BY REGISTRY
+# REGISTRY CHECK
 # ============================================================
 
 function Test-AppRegistry {
@@ -421,25 +436,25 @@ function Test-AppRegistry {
     )
 
 
-    $RegistryLocations = @(
+    $Locations = @(
         "HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
         "HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*"
         "HKCU:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*"
     )
 
 
-    foreach ($Location in $RegistryLocations) {
+    foreach ($Location in $Locations) {
 
         try {
 
-            $InstalledApps = Get-ItemProperty `
+            $Items = Get-ItemProperty `
                 -Path $Location `
                 -ErrorAction SilentlyContinue
 
 
-            foreach ($Installed in $InstalledApps) {
+            foreach ($Item in $Items) {
 
-                if (-not $Installed.DisplayName) {
+                if (-not $Item.DisplayName) {
 
                     continue
                 }
@@ -448,7 +463,7 @@ function Test-AppRegistry {
                 foreach ($Name in $App.RegistryNames) {
 
                     if (
-                        $Installed.DisplayName `
+                        $Item.DisplayName `
                         -like "*$Name*"
                     ) {
 
@@ -467,53 +482,7 @@ function Test-AppRegistry {
 
 
 # ============================================================
-# CHECK BY WINGET
-# ============================================================
-
-function Test-AppWinget {
-
-    param(
-        $App
-    )
-
-
-    $Winget = Get-WingetPath
-
-    if (-not $Winget) {
-
-        return $false
-    }
-
-
-    try {
-
-        $Output = & $Winget list `
-            --id $App.Id `
-            --exact `
-            --disable-interactivity `
-            2>&1
-
-
-        $Text = $Output -join "`n"
-
-
-        if (
-            $Text -match [regex]::Escape($App.Id)
-        ) {
-
-            return $true
-        }
-    }
-    catch {
-    }
-
-
-    return $false
-}
-
-
-# ============================================================
-# CHECK APP
+# APP CHECK
 # ============================================================
 
 function Test-AppInstalled {
@@ -523,22 +492,21 @@ function Test-AppInstalled {
     )
 
 
-    # 1. File check
+    # --------------------------------------------------------
+    # FIRST: File
+    # --------------------------------------------------------
+
     if (Test-AppFile $App) {
 
         return $true
     }
 
 
-    # 2. Registry check
+    # --------------------------------------------------------
+    # SECOND: Registry
+    # --------------------------------------------------------
+
     if (Test-AppRegistry $App) {
-
-        return $true
-    }
-
-
-    # 3. WinGet check
-    if (Test-AppWinget $App) {
 
         return $true
     }
@@ -567,7 +535,7 @@ function Install-App {
 
 
     # --------------------------------------------------------
-    # CHECK FIRST
+    # CHECK BEFORE INSTALL
     # --------------------------------------------------------
 
     Write-Log `
@@ -585,7 +553,7 @@ function Install-App {
 
 
     # --------------------------------------------------------
-    # WINGET
+    # GET WINGET
     # --------------------------------------------------------
 
     $Winget = Get-WingetPath
@@ -624,14 +592,12 @@ function Install-App {
         $ExitCode = $LASTEXITCODE
 
 
-        Start-Sleep -Seconds 1
-
-
         # ----------------------------------------------------
-        # IMPORTANT:
-        # Don't rely only on ExitCode.
-        # Winget may return non-zero when app is already installed.
+        # VERIFY
         # ----------------------------------------------------
+
+        Start-Sleep -Milliseconds 700
+
 
         if (Test-AppInstalled $App) {
 
@@ -643,10 +609,35 @@ function Install-App {
         }
 
 
+        # ----------------------------------------------------
+        # Winget sometimes reports already installed
+        # ----------------------------------------------------
+
+        if ($ExitCode -eq -1978335189) {
+
+            Write-Log `
+                "$($App.Name) da duoc cai tu truoc nhung chua tim thay executable." `
+                "WARN"
+
+
+            Start-Sleep -Seconds 2
+
+
+            if (Test-AppInstalled $App) {
+
+                Write-Log `
+                    "$($App.Name) da san sang." `
+                    "OK"
+
+                return "OK"
+            }
+        }
+
+
         Write-Log `
             (
-                "$($App.Name) chua xac nhan duoc. " +
-                "WinGet ExitCode=$ExitCode"
+                "$($App.Name) khong xac nhan duoc. " +
+                "ExitCode=$ExitCode"
             ) `
             "ERROR"
 
@@ -684,15 +675,15 @@ try {
 
 
     Write-Log `
-        "Bat dau installer." `
-        "INFO"
+        "Installer started."
 
 
     # --------------------------------------------------------
     # WINGET
     # --------------------------------------------------------
 
-    Write-Host "Kiem tra WinGet..."
+    Write-Host `
+        "Kiem tra WinGet..."
 
 
     if (Test-Winget) {
@@ -703,19 +694,16 @@ try {
     }
     else {
 
-        $WingetReady = Repair-Winget
-
-
-        if (-not $WingetReady) {
+        if (-not (Repair-Winget)) {
 
             Write-Log `
-                "Khong the su dung WinGet tren may nay." `
+                "Khong the su dung WinGet." `
                 "ERROR"
 
             Write-Host ""
 
             Write-Host `
-                "Hay kiem tra Microsoft App Installer / Windows Update." `
+                "Kiem tra Microsoft App Installer / Windows Update." `
                 -ForegroundColor Yellow
 
             Write-Host ""
@@ -728,10 +716,11 @@ try {
 
 
     # --------------------------------------------------------
-    # APPS
+    # INSTALL APPS
     # --------------------------------------------------------
 
     Write-Host ""
+
     Write-Host "==================================================" -ForegroundColor Cyan
     Write-Host "                 CHECK & INSTALL" -ForegroundColor Cyan
     Write-Host "==================================================" -ForegroundColor Cyan
@@ -746,7 +735,7 @@ try {
 
 
         $Results += [PSCustomObject]@{
-            Name   = $App.Name
+            Name = $App.Name
             Status = $Status
         }
     }
@@ -757,9 +746,11 @@ try {
     # --------------------------------------------------------
 
     Write-Host ""
+
     Write-Host "==================================================" -ForegroundColor Cyan
     Write-Host "                    KET QUA" -ForegroundColor Cyan
     Write-Host "==================================================" -ForegroundColor Cyan
+
     Write-Host ""
 
 
@@ -791,7 +782,7 @@ try {
     }
 
 
-    $InstalledCount = @(
+    $NewCount = @(
         $Results |
         Where-Object {
             $_.Status -eq "OK"
@@ -799,7 +790,7 @@ try {
     ).Count
 
 
-    $SkippedCount = @(
+    $SkipCount = @(
         $Results |
         Where-Object {
             $_.Status -eq "SKIP"
@@ -807,7 +798,7 @@ try {
     ).Count
 
 
-    $FailedCount = @(
+    $FailCount = @(
         $Results |
         Where-Object {
             $_.Status -eq "FAIL"
@@ -818,15 +809,15 @@ try {
     Write-Host ""
 
     Write-Host `
-        "Cai moi : $InstalledCount" `
+        "Cai moi : $NewCount" `
         -ForegroundColor Green
 
     Write-Host `
-        "Da co   : $SkippedCount" `
+        "Da co   : $SkipCount" `
         -ForegroundColor Yellow
 
     Write-Host `
-        "Loi     : $FailedCount" `
+        "Loi     : $FailCount" `
         -ForegroundColor Red
 
     Write-Host ""
@@ -838,7 +829,7 @@ try {
     Write-Host ""
 
 
-    if ($FailedCount -eq 0) {
+    if ($FailCount -eq 0) {
 
         Write-Host `
             "CAI DAT HOAN TAT." `
@@ -847,7 +838,7 @@ try {
     else {
 
         Write-Host `
-            "CO APP CHUA CAI DUOC. XEM LOG DE KIEM TRA." `
+            "CO APP BI LOI. KIEM TRA LOG." `
             -ForegroundColor Red
     }
 
@@ -859,9 +850,11 @@ try {
 catch {
 
     Write-Host ""
+
     Write-Host "==================================================" -ForegroundColor Red
     Write-Host "FATAL ERROR" -ForegroundColor Red
     Write-Host "==================================================" -ForegroundColor Red
+
     Write-Host ""
 
     Write-Host `
