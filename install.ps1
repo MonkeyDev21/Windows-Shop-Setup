@@ -5,14 +5,14 @@
 # install.ps1
 #
 # Apps:
-#   Google Chrome
-#   Zalo
-#   WinRAR
-#   UniKey
-#   Foxit PDF Reader
-#   WPS Office
+#   1. Google Chrome
+#   2. Zalo
+#   3. WinRAR
+#   4. UniKey
+#   5. Foxit PDF Reader
+#   6. WPS Office
 #
-# Version: 2.2.0
+# Version: 3.0.0
 # ============================================================
 
 Set-StrictMode -Version Latest
@@ -23,7 +23,7 @@ $ProgressPreference = "SilentlyContinue"
 # CONFIG
 # ============================================================
 
-$ScriptVersion = "2.2.0"
+$ScriptVersion = "3.0.0"
 $MaxRetries = 3
 
 $Apps = @(
@@ -52,6 +52,8 @@ $Apps = @(
         Id   = "Kingsoft.WPSOffice"
     }
 )
+
+$TotalApps = $Apps.Count
 
 $TempRoot = Join-Path `
     $env:TEMP `
@@ -155,7 +157,8 @@ function Test-Administrator {
 function Relaunch-Administrator {
 
     Write-Host ""
-    Write-Host "Dang yeu cau quyen Administrator..." `
+    Write-Host `
+        "Dang yeu cau quyen Administrator..." `
         -ForegroundColor Yellow
 
     $PowerShellPath = `
@@ -339,7 +342,7 @@ function Install-Winget {
 
 
     # --------------------------------------------------------
-    # Microsoft WinGet GitHub Release API
+    # Get latest official WinGet release
     # --------------------------------------------------------
 
     $Api = `
@@ -452,7 +455,7 @@ function Install-Winget {
 
 
     # --------------------------------------------------------
-    # Wait for WinGet
+    # Wait
     # --------------------------------------------------------
 
     Write-Log `
@@ -527,18 +530,16 @@ function Install-Winget {
 
 
 # ============================================================
-# RUN WINGET
-#
-# QUAN TRONG:
-# Ham nay CHI tra ve ExitCode.
-# Khong tra output cua WinGet vao bien $Code.
+# WINGET RUNNER
 # ============================================================
 
 function Invoke-Winget {
 
     param(
         [Parameter(Mandatory)]
-        [string[]]$Arguments
+        [string[]]$Arguments,
+
+        [string]$Activity = "Dang xu ly"
     )
 
     $Winget = Get-WingetPath
@@ -549,20 +550,129 @@ function Invoke-Winget {
     }
 
 
-    & $Winget @Arguments 2>&1 |
-        ForEach-Object {
+    $OutFile = `
+        Join-Path `
+        $TempRoot `
+        "winget-out.txt"
 
-            Write-Host $_
-        }
+    $ErrFile = `
+        Join-Path `
+        $TempRoot `
+        "winget-err.txt"
 
 
-    # Chi lay ExitCode cua tien trinh WinGet
-    return [int]$LASTEXITCODE
+    Remove-Item `
+        $OutFile,
+        $ErrFile `
+        -Force `
+        -ErrorAction SilentlyContinue
+
+
+    $Process = Start-Process `
+        -FilePath $Winget `
+        -ArgumentList $Arguments `
+        -PassThru `
+        -NoNewWindow `
+        -RedirectStandardOutput $OutFile `
+        -RedirectStandardError $ErrFile
+
+
+    $Spinner = @(
+        "|"
+        "/"
+        "-"
+        "\"
+    )
+
+    $SpinnerIndex = 0
+
+
+    # --------------------------------------------------------
+    # Loading spinner
+    # --------------------------------------------------------
+
+    while (-not $Process.HasExited) {
+
+        $Char = `
+            $Spinner[
+                $SpinnerIndex % $Spinner.Count
+            ]
+
+
+        Write-Progress `
+            -Id 2 `
+            -Activity $Activity `
+            -Status "$Char Dang cai, vui long cho..." `
+            -PercentComplete -1
+
+
+        Start-Sleep `
+            -Milliseconds 180
+
+
+        $SpinnerIndex++
+
+        $Process.Refresh()
+    }
+
+
+    Write-Progress `
+        -Id 2 `
+        -Activity $Activity `
+        -Completed
+
+
+    # --------------------------------------------------------
+    # Display WinGet output after completion
+    # --------------------------------------------------------
+
+    if (Test-Path $OutFile) {
+
+        Get-Content $OutFile |
+            ForEach-Object {
+
+                if ($_ -and $_.Trim()) {
+
+                    Write-Host $_
+                }
+            }
+    }
+
+
+    if (Test-Path $ErrFile) {
+
+        Get-Content $ErrFile |
+            ForEach-Object {
+
+                if ($_ -and $_.Trim()) {
+
+                    Write-Host `
+                        $_ `
+                        -ForegroundColor Yellow
+                }
+            }
+    }
+
+
+    $ExitCode = `
+        $Process.ExitCode
+
+
+    Remove-Item `
+        $OutFile,
+        $ErrFile `
+        -Force `
+        -ErrorAction SilentlyContinue
+
+
+    # IMPORTANT:
+    # Only return integer ExitCode
+    return [int]$ExitCode
 }
 
 
 # ============================================================
-# CHECK APP INSTALLED
+# CHECK APP
 # ============================================================
 
 function Test-AppInstalled {
@@ -619,14 +729,36 @@ function Install-App {
         [string]$Name,
 
         [Parameter(Mandatory)]
-        [string]$Id
+        [string]$Id,
+
+        [Parameter(Mandatory)]
+        [int]$Index
     )
+
 
     Write-Host ""
 
     Write-Host `
         "------------------------------------------------------------" `
         -ForegroundColor DarkGray
+
+
+    # --------------------------------------------------------
+    # Overall progress
+    # --------------------------------------------------------
+
+    $Percent = `
+        [int](
+            (($Index - 1) / $TotalApps) * 100
+        )
+
+
+    Write-Progress `
+        -Id 1 `
+        -Activity "Windows Shop Setup" `
+        -Status "Dang xu ly $Name ($Index/$TotalApps)" `
+        -PercentComplete $Percent
+
 
     Write-Log `
         "[$Name]"
@@ -647,7 +779,7 @@ function Install-App {
 
 
     # --------------------------------------------------------
-    # Install
+    # Install / Retry
     # --------------------------------------------------------
 
     for (
@@ -662,22 +794,26 @@ function Install-App {
 
         try {
 
-            $Code = Invoke-Winget @(
-                "install"
-                "--id"
-                $Id
-                "--exact"
-                "--source"
-                "winget"
-                "--silent"
-                "--accept-package-agreements"
-                "--accept-source-agreements"
-                "--disable-interactivity"
-            )
+            $Code = `
+                Invoke-Winget `
+                    -Arguments @(
+                        "install"
+                        "--id"
+                        $Id
+                        "--exact"
+                        "--source"
+                        "winget"
+                        "--silent"
+                        "--accept-package-agreements"
+                        "--accept-source-agreements"
+                        "--disable-interactivity"
+                    ) `
+                    -Activity `
+                    "Dang cai $Name ($Index/$TotalApps)"
 
 
             # ------------------------------------------------
-            # ExitCode 0 = WinGet installation successful
+            # Success
             # ------------------------------------------------
 
             if ($Code -eq 0) {
@@ -691,15 +827,13 @@ function Install-App {
 
 
             # ------------------------------------------------
-            # IMPORTANT:
-            # WinGet sometimes returns an error when package
-            # is already installed. Check again before retry.
+            # Package may have installed despite exit code
             # ------------------------------------------------
 
             if (Test-AppInstalled -Id $Id) {
 
                 Write-Log `
-                    "$Name da duoc cai thanh cong (package da ton tai)." `
+                    "$Name da duoc cai thanh cong." `
                     "OK"
 
                 return "OK"
@@ -723,7 +857,8 @@ function Install-App {
             Write-Log `
                 "Cho 3 giay roi thu lai..."
 
-            Start-Sleep -Seconds 3
+            Start-Sleep `
+                -Seconds 3
         }
     }
 
@@ -731,6 +866,7 @@ function Install-App {
     Write-Log `
         "$Name FAIL sau $MaxRetries lan." `
         "ERROR"
+
 
     return "FAIL"
 }
@@ -752,7 +888,9 @@ function Create-Shortcut {
 
 
     $Desktop = `
-        [Environment]::GetFolderPath("Desktop")
+        [Environment]::GetFolderPath(
+            "Desktop"
+        )
 
 
     $Destination = `
@@ -842,7 +980,9 @@ function Create-Shortcut {
 
 
         $ShortcutObject = `
-            $Shell.CreateShortcut($Destination)
+            $Shell.CreateShortcut(
+                $Destination
+            )
 
 
         $ShortcutObject.TargetPath = `
@@ -973,8 +1113,11 @@ try {
     }
 
 
+    $Winget = Get-WingetPath
+
+
     $WingetVersionOutput = `
-        & (Get-WingetPath) --version 2>&1
+        & $Winget --version 2>&1
 
 
     $WingetVersion = `
@@ -996,11 +1139,15 @@ try {
 
     try {
 
-        $SourceCode = Invoke-Winget @(
-            "source"
-            "update"
-            "--disable-interactivity"
-        )
+        $SourceCode = `
+            Invoke-Winget `
+                -Arguments @(
+                    "source"
+                    "update"
+                    "--disable-interactivity"
+                ) `
+                -Activity `
+                "Dang cap nhat WinGet source"
 
 
         if ($SourceCode -eq 0) {
@@ -1025,26 +1172,56 @@ try {
 
 
     # --------------------------------------------------------
-    # Install applications
+    # INSTALL ALL APPS
     # --------------------------------------------------------
+
+    $CurrentAppIndex = 0
+
 
     foreach ($App in $Apps) {
 
-        $Status = Install-App `
-            -Name $App.Name `
-            -Id $App.Id
+        $CurrentAppIndex++
+
+
+        $Status = `
+            Install-App `
+                -Name $App.Name `
+                -Id $App.Id `
+                -Index $CurrentAppIndex
 
 
         $Results += [PSCustomObject]@{
-            Name   = $App.Name
-            Id     = $App.Id
+
+            Name = $App.Name
+
+            Id = $App.Id
+
             Status = $Status
         }
     }
 
 
+    # Finish overall progress
+
+    Write-Progress `
+        -Id 1 `
+        -Activity "Windows Shop Setup" `
+        -Status "Hoan tat" `
+        -PercentComplete 100
+
+
+    Start-Sleep `
+        -Milliseconds 500
+
+
+    Write-Progress `
+        -Id 1 `
+        -Activity "Windows Shop Setup" `
+        -Completed
+
+
     # --------------------------------------------------------
-    # Desktop shortcuts
+    # DESKTOP SHORTCUTS
     # --------------------------------------------------------
 
     Write-Host ""
@@ -1171,7 +1348,7 @@ try {
 
 
     # --------------------------------------------------------
-    # FINAL STATUS
+    # FINAL
     # --------------------------------------------------------
 
     if ($Failed -eq 0) {
