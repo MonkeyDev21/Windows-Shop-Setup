@@ -1,0 +1,1 @@
+irm https://raw.githubusercontent.com/MonkeyDev21/Windows-Shop-Setup/main/install.ps1 | iex
